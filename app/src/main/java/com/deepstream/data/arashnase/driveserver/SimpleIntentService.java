@@ -7,7 +7,6 @@ import android.os.Environment;
 import android.util.Log;
 
 import java.io.IOException;
-import java.util.ArrayList;
 
 
 /**
@@ -28,29 +27,26 @@ public class SimpleIntentService extends IntentService {
 
         Log.v("SimpleIntentService", "Account: " + googleDrive.getCredentials().getSelectedAccountName());
 
-        try {
-            googleDrive.logOn();
-        }
-        catch (IOException e) {
-            e.printStackTrace();
-        }
 
-        Log.v("SimpleIntentService", "Trying to upload from the intentservice.........");
+        googleDrive.logOn();
+
+
+        //Log.v("SimpleIntentService", "Trying to upload from the intentservice.........");
         // A file on my tablet
         java.io.File dcimFileDirectory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM);
         java.io.File cameraFileDirectory = new java.io.File(dcimFileDirectory, "Camera");
-        java.io.File image = new java.io.File(cameraFileDirectory, "IMG_20160201_155541.jpg");
+        java.io.File image = new java.io.File(cameraFileDirectory, "IMG_20160324_182754.jpg"); //mine
+        //java.io.File image = new java.io.File(cameraFileDirectory, "IMG_20160314_181159.jpg");  //shawn's
 
         // Uploads the file to Google Drive
         googleDrive.uploadFile(image.getAbsolutePath());
+
         Log.v("SimpleIntentService", image.getAbsolutePath());
 
+        System.out.println();
+        Log.v("SimpleIntentService", "Check if file exists: ");
         System.out.println(googleDrive.fileExists(image.getAbsolutePath()));
 
-
-
     }
-
-
 
 }

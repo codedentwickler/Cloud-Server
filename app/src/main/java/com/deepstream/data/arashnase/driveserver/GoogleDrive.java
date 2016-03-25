@@ -64,7 +64,9 @@ public class GoogleDrive {
     private HashMap<String, File> filesHashMap;
 
 
-    // Constructor: inits the class variables
+    /*
+     Constructor: inits the class variables
+      */
     public GoogleDrive(Context context) {
         this.context = context;
         JSON_FACTORY = JacksonFactory.getDefaultInstance();
@@ -91,98 +93,128 @@ public class GoogleDrive {
 
 
 
-    // Method to log into the account, builds an authorized Drive client service.
-    public void logOn() throws IOException {
+    /*
+     Method to log into the account, builds an authorized Drive client service.
+      */
+    public void logOn() {
         // Initializes the Drive API by making a call to Google Client Server
-        this.service = new Drive.Builder(
-                HTTP_TRANSPORT, JSON_FACTORY, this.credential)
-                .setApplicationName(APPLICATION_NAME)
-                .build();
+        try {
+            this.service = new Drive.Builder(
+                    HTTP_TRANSPORT, JSON_FACTORY, this.credential)
+                    .setApplicationName(APPLICATION_NAME)
+                    .build();
+            Log.v(DEBUG_TAG, "logOn(): Successfully logged on to Google Drive account.");
+        }
+        catch(Exception e) {
+            Log.v(DEBUG_TAG, "logOn(): Could not log on to the Google Drive account.");
+        }
     }
 
 
-    // Abstract method to log off from the account
+    /*
+     Abstract method to log off from the account
+      */
     public boolean logOff(){
         return true;
         // TODO
     }
 
 
-    // Abstract method to upload the file to the account
+    /*
+    Abstract method to upload the file to the account
+     */
     public void uploadFile(String sFilePath) {
-        java.io.File file = new java.io.File(sFilePath);
-        File googleFile = this.insertFile(sFilePath);
-        Log.v(DEBUG_TAG, googleFile.getId() + " was uploaded successfully.");
-    }
-
-
-    // Abstract method to download the file from the account
-    public boolean downloadFile(String sFilePath, String sDestinationFilePath) {
-        return true;
-        // TODO
-    }
-
-
-    // Abstract method to remove a file from the account
-    // Returns true if successfully deletes the file, false otherwise
-    public boolean removeFile(String sFilePath) {
-        ArrayList<File> files = null;
-        try {
-            files = this.getDriveFiles();
-        }
-        catch(IOException e){
-            Log.v(DEBUG_TAG, "removeFile: Cannot access drive.");
-            e.printStackTrace();
-            return false;
-        }
-
-        if (files == null || files.size() == 0) {
-            Log.v(DEBUG_TAG, "No files found.");
+        if (fileExists(sFilePath)) {
+            Log.v(DEBUG_TAG, "uploadFile(): Did not upload, file already exists.");
         }
         else {
+            File googleFile = this.insertFile(sFilePath);
+            Log.v(DEBUG_TAG, "uploadFile(): File with ID " + googleFile.getId() + " was uploaded successfully.");
+        }
+    }
+
+
+    /*
+     Abstract method to download the file from the account
+      */
+    public boolean downloadFile(String sFilePath, String sDestinationFilePath) {
+        // TODO
+        if (fileExists(sFilePath)) {
+            Log.v(DEBUG_TAG, "downloadFile(): File downloaded to device successfully.");
+            return true;
+        }
+        else {
+            Log.v(DEBUG_TAG, "downloadFile(): File does not exist.");
+            return false;
+        }
+    }
+
+
+    /*
+     Abstract method to remove a file from the account
+     Returns true if successfully deletes the file, false otherwise
+     Note: this function only removes the file, and not the folders containing that file
+     (which could leave empty folders on Google Drive)
+      */
+    public boolean removeFile(String sFilePath) {
+        if (fileExists(sFilePath)) {
+            ArrayList<File> files = this.getDriveFiles();
+            String id = this.getDriveFileID(sFilePath);
+            this.deleteFile(id);
+            Log.v(DEBUG_TAG, "removeFile(): File with ID " + id + " was deleted.");
+            return true;
+        }
+        Log.v(DEBUG_TAG, "removeFile(): No file to delete.");
+        return false;
+    }
+
+
+    /*
+     Method to check if a file exists on the google drive server
+     This function first checks if any file in the drive exists that has the same name as the
+     file passed to it as an argument. If not, returns false, if yes, it checks if its parent
+     folder is the same as the parents of the argument...if not, returns false, if yes, it means
+     the same file within the same folders exists in the drive.
+      */
+    public boolean fileExists(String sFilePath) {
+        // TODO: right now it only checks for a file with same name and with the same first parent
+        // TODO: should improve to check all parents
+        String[] parents = getFoldersList(sFilePath);
+
+        for(int i=0; i<parents.length; i++){
+            System.out.print(parents[i] + " ");
+        }
+        System.out.println();
+        FileList result = null;
+        try {
+            result = service.files().list()
+                    .setQ("title='" + getFullName(sFilePath) + "' and trashed=false").execute();
+        }
+        catch(IOException e) {
+            e.printStackTrace();
+        }
+
+        if(result == null) {
+            return false;
+        }
+        else {
+            ArrayList<File> files = (ArrayList<File>) result.getItems();
             for (File file : files) {
-                if (file.getTitle().equals(sFilePath)) {
-                    deleteFile(file.getId());
-                    return true;
+                System.out.println(file.getTitle() + " : -" + file.getMimeType() + " -parent: " + file.getParents());
+                String parentId = file.getParents().get(0).getId();
+                try {
+                    File parent = service.files().get(parentId).execute();
+                    if (parents[parents.length-1].equals(parent.getTitle())) {
+                        return true;
+                    }
+                }
+                catch(IOException e) {
+                    e.printStackTrace();
                 }
             }
         }
         return false;
     }
-
-
-    // Abstract method to check to see if a file exists in the account
-    public boolean fileExists(String sFilePath) {
-        // TODO: use file.getParents which returns a list of parentreferences to check if a file exists
-        String localPath = getLocalPath(sFilePath);
-        String fileName = getFileName(sFilePath);
-        String fileExt = getFileExtension(sFilePath);
-        String[] parents = getFoldersList(sFilePath);
-
-        ArrayList<File> files = null;
-        try {
-            files = this.getDriveFiles();
-        } catch (IOException e) {
-            Log.v(DEBUG_TAG, "fileExists: Cannot access drive.");
-            e.printStackTrace();
-        }
-
-        if (files == null || files.size() == 0) {
-            return false;
-        } else {
-            for (int i = 0; i < parents.length; i++) {
-                for (File file : files) {
-                    //System.out.println(file.getTitle() + " : " + file.getMimeType() + " parent: " + file.getParents());
-                    if (file.getTitle().equals(parents[i])) {
-
-                    }
-
-                }
-            }
-            return false;
-        }
-    }
-
 
 
 
@@ -200,19 +232,8 @@ public class GoogleDrive {
         this.credential = credentials;
     }
 
-    public String getAccountName(){
+    public String getAccountName() {
         return accountName;
-    }
-
-    /**
-     * Returns a ArrayList of Google.File objects in the drive account
-     * @return ArrayList<Google.File>
-     * @throws IOException
-     */
-    public ArrayList<File> getDriveFiles() throws IOException{
-        FileList result = service.files().list().execute();
-        ArrayList<File> files = (ArrayList<File>) result.getItems();
-        return files;
     }
 
 
@@ -224,7 +245,7 @@ public class GoogleDrive {
 	 * ************************************************************
 	 */
 
-    /**
+    /*
      * Insert new file to Drive
      * @param filePath Absolute path of the file to insert
      * @return Inserted file metadata if successful, {@code null} otherwise.
@@ -251,14 +272,116 @@ public class GoogleDrive {
             File file = this.service.files().insert(body, mediaContent).execute();
             return file;
         } catch (IOException e) {
-            Log.v(DEBUG_TAG, "An error occurred while uploading.");
+            Log.v(DEBUG_TAG, "An error occurred while uploading using Google Drive API.");
             e.printStackTrace();
             return null;
         }
     }
 
-    // This function gets an array of Strings representing a file's parent folders
-    // And returns the most inner parent folder's ID
+
+    /*
+     * Permanently delete a file, skipping the trash.
+     * @param fileId ID of the file to delete on the google drive.
+     */
+    private void deleteFile(String fileId) {
+        try {
+            this.service.files().delete(fileId).execute();
+        } catch (IOException e) {
+            Log.v(DEBUG_TAG, "An error occurred while deleting using Google Drive API.");
+            e.printStackTrace();
+        }
+    }
+
+
+    /*
+     * Download a file's content.
+     * @param file Drive File instance.
+     * @return InputStream containing the file's content if successful,
+     *         {@code null} otherwise.
+     */
+    private InputStream downloadFile(File file) {
+        if (file.getDownloadUrl() != null && file.getDownloadUrl().length() > 0) {
+            try {
+                HttpResponse resp = this.service.getRequestFactory()
+                        .buildGetRequest(new GenericUrl(file.getDownloadUrl()))
+                        .execute();
+                return resp.getContent();
+            } catch (IOException e) {
+                Log.v(DEBUG_TAG, "An error occurred while downloading using Google Drive API.");
+                e.printStackTrace();
+                return null;
+            }
+        } else {
+            // The file doesn't have any content stored on Drive.
+            return null;
+        }
+    }
+
+
+    /*
+     * Returns an ArrayList of Google File objects in the drive account
+     * @return ArrayList<Google.File>
+     */
+    public ArrayList<File> getDriveFiles() {
+        FileList result = null;
+        try {
+            // returns all files(not folders, and not the ones in the trash)
+            result = service.files().list()
+                    .setQ("trashed=false and mimeType!='application/vnd.google-apps.folder'" ).execute();
+        }
+        catch (IOException e){
+            Log.v(DEBUG_TAG, "GetDriveFiles(): An error occurred while getting Drive files.");
+            e.printStackTrace();
+        }
+        return (ArrayList<File>) result.getItems();
+    }
+
+
+    /*
+    Searches the Google Drive for a file with the given name, returns its ID
+     */
+    private String getDriveFileID(String sFilePath) {
+        FileList result = null;
+        String id = null;
+
+        try {
+            result = service.files().list()
+                    .setQ("title='" + getFullName(sFilePath) + "' and trashed=false").execute();
+        }
+        catch(IOException e) {
+            e.printStackTrace();
+        }
+
+        if(result == null) {
+            id = null;
+        }
+        else {
+            ArrayList<File> files = (ArrayList<File>) result.getItems();
+            // checking if the parent of the file is the same as the parent folder of sFilePath
+            String[] parents = getFoldersList(sFilePath);
+            for (File file : files) {
+                String parentId = file.getParents().get(0).getId();
+                try {
+                    File parent = service.files().get(parentId).execute();
+                    if (parents[parents.length-1].equals(parent.getTitle())) {
+                        id = file.getId();
+                    }
+                }
+                catch(IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        return id;
+
+    }
+
+
+    /*
+    This function gets an array of Strings representing a file's parent folders
+    And returns the most inner parent folder's ID
+     */
     private String makeParentFolders(String[] parentList) {
         File folder = null;
         String folderId = null;
@@ -281,61 +404,23 @@ public class GoogleDrive {
     }
 
 
-    /**
-     * Permanently delete a file, skipping the trash.
-     * @param fileId ID of the file to delete.
-     */
-    private void deleteFile(String fileId) {
-        try {
-            this.service.files().delete(fileId).execute();
-        } catch (IOException e) {
-            Log.v(DEBUG_TAG, "An error occurred while deleting.");
-            e.printStackTrace();
-        }
-    }
-
-
-    /**
-     * Download a file's content.
-     * @param file Drive File instance.
-     * @return InputStream containing the file's content if successful,
-     *         {@code null} otherwise.
-     */
-    private InputStream downloadFile(File file) {
-        if (file.getDownloadUrl() != null && file.getDownloadUrl().length() > 0) {
-            try {
-                HttpResponse resp = this.service.getRequestFactory()
-                        .buildGetRequest(new GenericUrl(file.getDownloadUrl()))
-                        .execute();
-                return resp.getContent();
-            } catch (IOException e) {
-                Log.v(DEBUG_TAG, "An error occurred while downloading.");
-                e.printStackTrace();
-                return null;
-            }
-        } else {
-            // The file doesn't have any content stored on Drive.
-            return null;
-        }
-    }
-
-
-
-
     // Returns the canonical path of the file, given its absolute path
     private String getLocalPath(String sFilePath) {
         return sFilePath.substring(sFilePath.indexOf('0') + 1, sFilePath.length()).trim();
     }
+
 
     // Returns the extension of the file
     private String getFileExtension(String sFilePath) {
         return sFilePath.substring(sFilePath.indexOf('.') + 1, sFilePath.length()).trim();
     }
 
+
     // Returns a String array of folder names
     private String[] getFoldersList(String sFilePath) {
         return this.getLocalPath(sFilePath).substring(1, this.getLocalPath(sFilePath).lastIndexOf('/')).trim().split("/");
     }
+
 
     // Returns the name of the file
     private String getFileName(String sFilePath) {
@@ -343,6 +428,15 @@ public class GoogleDrive {
     }
 
 
+    // Returns the full name of the file (name + extension)
+    private String getFullName(String sFilePath) {
+        return getFileName(sFilePath) + "." + getFileExtension(sFilePath);
+    }
+
+
+    /*
+    Given a string representing a file extension, returns the mime type
+     */
     private String getMimeType(String extension) {
         String mime;
         switch (extension) {

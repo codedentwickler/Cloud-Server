@@ -32,10 +32,7 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 
-import java.io.BufferedWriter;
-import java.io.FileOutputStream;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -65,6 +62,7 @@ public class MainActivity extends Activity {
     // The features you need to use in Google Drive (access to metadata, changing drive files...)
     private static final String[] SCOPES = {DriveScopes.DRIVE_METADATA, DriveScopes.DRIVE, DriveScopes.DRIVE_FILE};
 
+    private GoogleDrive googleDrive;
     /**************************************************************************************/
 
 
@@ -82,6 +80,8 @@ public class MainActivity extends Activity {
         // Initialize credentials and service object.
         SharedPreferences settings =
                 getSharedPreferences(GoogleDrive.DATA_STORE_FACTORY, Context.MODE_PRIVATE);
+
+        googleDrive = new GoogleDrive(getApplicationContext());
 
         mCredential = GoogleAccountCredential
                 .usingOAuth2(getApplicationContext(), Arrays.asList(SCOPES))
@@ -111,6 +111,7 @@ public class MainActivity extends Activity {
                 if (mCredential.getSelectedAccountName() != null) {
                     new AuthorizationRequest(mCredential).execute();
                 }
+                googleDrive.setCredentials(mCredential);
             }
         });
 
@@ -270,7 +271,7 @@ public class MainActivity extends Activity {
     /**
      * An asynchronous task that handles the Drive API call. This is needed to make a quick
      * API call in order to trigger OAuth authorization flow...
-     * TODO: will come up with a better way to trigger OAuth
+     * TODO: will come up with a better way to trigger OAuth, using AccountManager
      */
     private class AuthorizationRequest extends AsyncTask<Void, Void, List<String>> {
 
@@ -338,7 +339,5 @@ public class MainActivity extends Activity {
             }
         }
     }
-
-
 
 }
